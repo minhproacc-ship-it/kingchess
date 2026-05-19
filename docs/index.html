@@ -166,7 +166,14 @@
 
       function onSnapEnd() { board.position(game.fen()); }
 
-      const config = { draggable: true, position: 'start', onDragStart, onDrop, onSnapEnd };
+      const config = {
+        draggable: true,
+        position: 'start',
+        pieceTheme: 'vendor/img/chesspieces/wikipedia/{piece}.png',
+        onDragStart,
+        onDrop,
+        onSnapEnd
+      };
       board = ChessBoard('board', config);
 
       function updateStatus() {
