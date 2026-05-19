@@ -85,6 +85,20 @@
       let playerColor = 'white';
       let aiColor = 'black';
 
+      function startAIGame() {
+        playerColor = sideSelect.value;
+        aiColor = playerColor === 'white' ? 'black' : 'white';
+        setMode('ai');
+        game.reset();
+        board.orientation(playerColor);
+        board.start();
+        updateStatus();
+        if (aiColor === 'white') {
+          statusEl.textContent = 'Trạng thái: AI đang đi...';
+          window.setTimeout(doAIMove, 300);
+        }
+      }
+
       function setMode(m){
         mode = m;
         [modeOnline, modeLocal, modeAI].forEach(b=>b.classList.remove('active'));
@@ -95,17 +109,9 @@
 
       modeOnline.addEventListener('click', ()=>setMode('online'));
       modeLocal.addEventListener('click', ()=>setMode('local'));
-      modeAI.addEventListener('click', ()=>setMode('ai'));
+      modeAI.addEventListener('click', startAIGame);
 
-      startAI.addEventListener('click', ()=>{
-        playerColor = sideSelect.value;
-        aiColor = playerColor === 'white' ? 'black' : 'white';
-        setMode('ai');
-        game.reset();
-        board.start();
-        updateStatus();
-        if (aiColor === 'white') window.setTimeout(doAIMove, 300);
-      });
+      startAI.addEventListener('click', startAIGame);
 
       // Try to detect socket.io on same origin; if not present, run in local/offline mode
       function tryLoadSocket() {
@@ -151,7 +157,6 @@
           if (turn !== playerColor) return false;
           if (piece[0] !== playerColor[0]) return false;
         }
-        // only allow moving the side to move
         if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
             (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
           return false;
@@ -190,6 +195,11 @@
           status = 'Hòa.';
         } else {
           status = moveColor + ' đến lượt.' + (game.in_check() ? ' Check!' : '');
+        }
+
+        if (mode === 'ai' && !game.game_over()) {
+          const side = playerColor === 'white' ? 'Trắng' : 'Đen';
+          status = 'Chế độ AI: bạn đi ' + side + '. ' + status;
         }
 
         statusEl.textContent = 'Trạng thái: ' + status;

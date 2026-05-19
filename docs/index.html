@@ -86,6 +86,20 @@
       let playerColor = 'white';
       let aiColor = 'black';
 
+      function startAIGame() {
+        playerColor = sideSelect.value;
+        aiColor = playerColor === 'white' ? 'black' : 'white';
+        setMode('ai');
+        game.reset();
+        board.orientation(playerColor);
+        board.start();
+        updateStatus();
+        if (aiColor === 'white') {
+          statusEl.textContent = 'Trạng thái: AI đang đi...';
+          window.setTimeout(doAIMove, 300);
+        }
+      }
+
       function setMode(m){
         mode = m;
         [modeOnline, modeLocal, modeAI].forEach(b=>b.classList.remove('active'));
@@ -96,17 +110,9 @@
 
       modeOnline.addEventListener('click', ()=>setMode('online'));
       modeLocal.addEventListener('click', ()=>setMode('local'));
-      modeAI.addEventListener('click', ()=>setMode('ai'));
+      modeAI.addEventListener('click', startAIGame);
 
-      startAI.addEventListener('click', ()=>{
-        playerColor = sideSelect.value;
-        aiColor = playerColor === 'white' ? 'black' : 'white';
-        setMode('ai');
-        game.reset();
-        board.start();
-        updateStatus();
-        if (aiColor === 'white') window.setTimeout(doAIMove, 300);
-      });
+      startAI.addEventListener('click', startAIGame);
 
       function tryLoadSocket() {
         fetch('/socket.io/socket.io.js', { method: 'HEAD' }).then(res => {
@@ -189,6 +195,11 @@
           status = 'Hòa.';
         } else {
           status = moveColor + ' đến lượt.' + (game.in_check() ? ' Check!' : '');
+        }
+
+        if (mode === 'ai' && !game.game_over()) {
+          const side = playerColor === 'white' ? 'Trắng' : 'Đen';
+          status = 'Chế độ AI: bạn đi ' + side + '. ' + status;
         }
 
         statusEl.textContent = 'Trạng thái: ' + status;
