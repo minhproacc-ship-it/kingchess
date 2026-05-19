@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KingChess — Chơi cờ vua</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/css/chessboard-1.0.0.min.css" integrity="" crossorigin="anonymous" />
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>KingChess — Chơi trực tuyến</h1>
+      </header>
+
+      <main>
+        <div class="controls">
+          <input id="roomInput" placeholder="Mã phòng (ví dụ: room1)" />
+          <button id="joinBtn">Tạo/Gia nhập phòng</button>
+          <button id="resetBtn">Đặt lại</button>
+          <span id="status">Trạng thái: chưa kết nối</span>
+        </div>
+
+        <div id="board" style="width: 480px"></div>
+        <div id="moves"></div>
+      </main>
+
+      <footer>
+        <small>Đơn giản: luật cờ bởi chess.js, giao diện bởi chessboard.js</small>
+      </footer>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/js/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      const statusEl = document.getElementById('status');
+      const joinBtn = document.getElementById('joinBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const roomInput = document.getElementById('roomInput');
+      const movesEl = document.getElementById('moves');
+
+      let board = null;
+      const game = new Chess();
+      let currentRoom = null;
+
+      function onDragStart(source, piece, position, orientation) {
+        if (game.game_over()) return false;
+        // only allow moving the side to move
+        if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+            (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+          return false;
+        }
+      }
+
+      function onDrop(source, target) {
+        const move = game.move({ from: source, to: target, promotion: 'q' });
+        if (move === null) return 'snapback';
+        updateStatus();
+        if (currentRoom) socket.emit('move', { room: currentRoom, move });
+      }
+
+      function onSnapEnd() {
+        board.position(game.fen());
+      }
+
+      const config = {
+        draggable: true,
+        position: 'start',
+        onDragStart: onDragStart,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd
+      };
+
+      board = Chessboard('board', config);
+
+      function updateStatus() {
+        let status = '';
+        const moveColor = game.turn() === 'w' ? 'White' : 'Black';
+
+        if (game.in_checkmate()) {
+          status = 'Checkmate. ' + (moveColor === 'White' ? 'Black' : 'White') + ' thắng.';
+        } else if (game.in_draw()) {
+          status = 'Hòa.';
+        } else {
+          status = moveColor + ' đến lượt.' + (game.in_check() ? ' Check!' : '');
+        }
+
+        statusEl.textContent = 'Trạng thái: ' + status;
+        movesEl.textContent = game.pgn();
+      }
+
+      joinBtn.addEventListener('click', () => {
+        const room = roomInput.value.trim();
+        if (!room) return alert('Nhập mã phòng.');
+        currentRoom = room;
+        socket.emit('join', room, () => {
+          statusEl.textContent = 'Trạng thái: Đã vào phòng ' + room;
+        });
+      });
+
+      resetBtn.addEventListener('click', () => {
+        game.reset();
+        board.start();
+        updateStatus();
+        if (currentRoom) socket.emit('reset', currentRoom);
+      });
+
+      socket.on('move', (move) => {
+        // apply opponent move
+        game.move(move);
+        board.position(game.fen());
+        updateStatus();
+      });
+
+      socket.on('reset', () => {
+        game.reset();
+        board.start();
+        updateStatus();
+      });
+
+      updateStatus();
+    </script>
+  </body>
+</html>
