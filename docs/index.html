@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KingChess — Chơi cờ vua</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/docs/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/css/chessboard-1.0.0.min.css" integrity="" crossorigin="anonymous" />
   </head>
   <body>
@@ -45,7 +45,6 @@
       const game = new Chess();
       let currentRoom = null;
 
-      // Try to detect socket.io on same origin; if not present, run in local/offline mode
       function tryLoadSocket() {
         fetch('/socket.io/socket.io.js', { method: 'HEAD' }).then(res => {
           if (!res.ok) throw new Error('no-socket');
@@ -84,7 +83,6 @@
 
       function onDragStart(source, piece, position, orientation) {
         if (game.game_over()) return false;
-        // only allow moving the side to move
         if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
             (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
           return false;
@@ -95,7 +93,7 @@
         const move = game.move({ from: source, to: target, promotion: 'q' });
         if (move === null) return 'snapback';
         updateStatus();
-        if (currentRoom) socket.emit('move', { room: currentRoom, move });
+        if (currentRoom && socket) socket.emit('move', { room: currentRoom, move });
       }
 
       function onSnapEnd() {
@@ -144,7 +142,6 @@
         updateStatus();
         if (currentRoom && socket) socket.emit('reset', currentRoom);
       });
-
 
       updateStatus();
     </script>
