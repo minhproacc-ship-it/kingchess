@@ -82,6 +82,7 @@
       let currentRoom = null;
       let mode = 'online'; // online | local | ai
       let aiDepth = 3;
+      let playerColor = 'white';
       let aiColor = 'black';
 
       function setMode(m){
@@ -97,12 +98,13 @@
       modeAI.addEventListener('click', ()=>setMode('ai'));
 
       startAI.addEventListener('click', ()=>{
-        aiColor = sideSelect.value === 'white' ? 'black' : 'white';
+        playerColor = sideSelect.value;
+        aiColor = playerColor === 'white' ? 'black' : 'white';
         setMode('ai');
         game.reset();
         board.start();
         updateStatus();
-        if(aiColor==='white') window.setTimeout(doAIMove, 300);
+        if (aiColor === 'white') window.setTimeout(doAIMove, 300);
       });
 
       // Try to detect socket.io on same origin; if not present, run in local/offline mode
@@ -144,9 +146,10 @@
 
       function onDragStart(source, piece, position, orientation) {
         if (game.game_over()) return false;
-        // if playing vs AI, restrict moving side
-        if (mode==='ai'){
-          if ((aiColor==='white' && piece.search(/^w/)===0) || (aiColor==='black' && piece.search(/^b/)===0)) return false;
+        if (mode === 'ai') {
+          const turn = game.turn() === 'w' ? 'white' : 'black';
+          if (turn !== playerColor) return false;
+          if (piece[0] !== playerColor[0]) return false;
         }
         // only allow moving the side to move
         if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
@@ -159,10 +162,9 @@
         const move = game.move({ from: source, to: target, promotion: 'q' });
         if (move === null) return 'snapback';
         updateStatus();
-        if (mode==='online' && currentRoom && socket) socket.emit('move', { room: currentRoom, move });
-        if (mode==='ai'){
-          // after player move, let AI respond
-          if (!game.game_over()) window.setTimeout(doAIMove, 120);
+        if (mode === 'online' && currentRoom && socket) socket.emit('move', { room: currentRoom, move });
+        if (mode === 'ai' && !game.game_over()) {
+          window.setTimeout(doAIMove, 120);
         }
       }
 
@@ -249,12 +251,11 @@
       }
 
       function doAIMove(){
-        if(mode!=='ai' || game.game_over()) return;
-        // If it's AI's turn
+        if (mode !== 'ai' || game.game_over()) return;
         const turn = game.turn() === 'w' ? 'white' : 'black';
-        if(turn !== aiColor) return;
+        if (turn !== aiColor) return;
         const mv = getBestMove(game, aiDepth) || (game.moves({verbose:true})[0]);
-        if(mv){
+        if (mv) {
           game.move(mv);
           board.position(game.fen());
           updateStatus();
