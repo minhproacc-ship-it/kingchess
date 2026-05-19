@@ -167,7 +167,7 @@
       function onSnapEnd() { board.position(game.fen()); }
 
       const config = { draggable: true, position: 'start', onDragStart, onDrop, onSnapEnd };
-      board = Chessboard('board', config);
+      board = ChessBoard('board', config);
 
       function updateStatus() {
         let status = '';
