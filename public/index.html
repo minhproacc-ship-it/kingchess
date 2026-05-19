@@ -14,15 +14,46 @@
       </header>
 
       <main>
-        <div class="controls">
-          <input id="roomInput" placeholder="Mã phòng (ví dụ: room1)" />
-          <button id="joinBtn">Tạo/Gia nhập phòng</button>
-          <button id="resetBtn">Đặt lại</button>
-          <span id="status">Trạng thái: chưa kết nối</span>
-        </div>
+        <div class="main-grid">
+          <div class="board-card">
+            <div id="board"></div>
+          </div>
 
-        <div id="board" style="width: 480px"></div>
-        <div id="moves"></div>
+          <aside class="controls-panel">
+            <div class="meta">
+              <div>
+                <strong>KingChess</strong>
+                <div class="small">Chơi online hoặc với máy</div>
+              </div>
+              <div class="small" id="status">Trạng thái: chưa kết nối</div>
+            </div>
+
+            <div class="controls-row">
+              <input id="roomInput" placeholder="Mã phòng (ví dụ: room1)" />
+              <button id="joinBtn" class="btn">Join</button>
+            </div>
+
+            <div class="controls-row">
+              <button id="resetBtn" class="btn ghost">Đặt lại</button>
+              <div class="mode-select" style="margin-left:auto">
+                <button id="modeOnline" class="active">Online</button>
+                <button id="modeLocal">Local</button>
+                <button id="modeAI">Vs Máy</button>
+              </div>
+            </div>
+
+            <div class="controls-row">
+              <label class="small">Màu:</label>
+              <select id="sideSelect">
+                <option value="white">Trắng</option>
+                <option value="black">Đen</option>
+              </select>
+              <button id="startAI" class="btn" style="margin-left:auto">Bắt đầu vs Máy</button>
+            </div>
+
+            <div class="moves-list" id="moves"></div>
+          </aside>
+        </div>
       </main>
 
       <footer>
@@ -40,10 +71,39 @@
       const resetBtn = document.getElementById('resetBtn');
       const roomInput = document.getElementById('roomInput');
       const movesEl = document.getElementById('moves');
+      const modeOnline = document.getElementById('modeOnline');
+      const modeLocal = document.getElementById('modeLocal');
+      const modeAI = document.getElementById('modeAI');
+      const startAI = document.getElementById('startAI');
+      const sideSelect = document.getElementById('sideSelect');
 
       let board = null;
       const game = new Chess();
       let currentRoom = null;
+      let mode = 'online'; // online | local | ai
+      let aiDepth = 3;
+      let aiColor = 'black';
+
+      function setMode(m){
+        mode = m;
+        [modeOnline, modeLocal, modeAI].forEach(b=>b.classList.remove('active'));
+        if(m==='online') modeOnline.classList.add('active');
+        if(m==='local') modeLocal.classList.add('active');
+        if(m==='ai') modeAI.classList.add('active');
+      }
+
+      modeOnline.addEventListener('click', ()=>setMode('online'));
+      modeLocal.addEventListener('click', ()=>setMode('local'));
+      modeAI.addEventListener('click', ()=>setMode('ai'));
+
+      startAI.addEventListener('click', ()=>{
+        aiColor = sideSelect.value === 'white' ? 'black' : 'white';
+        setMode('ai');
+        game.reset();
+        board.start();
+        updateStatus();
+        if(aiColor==='white') window.setTimeout(doAIMove, 300);
+      });
 
       // Try to detect socket.io on same origin; if not present, run in local/offline mode
       function tryLoadSocket() {
@@ -84,6 +144,10 @@
 
       function onDragStart(source, piece, position, orientation) {
         if (game.game_over()) return false;
+        // if playing vs AI, restrict moving side
+        if (mode==='ai'){
+          if ((aiColor==='white' && piece.search(/^w/)===0) || (aiColor==='black' && piece.search(/^b/)===0)) return false;
+        }
         // only allow moving the side to move
         if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
             (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
@@ -95,21 +159,16 @@
         const move = game.move({ from: source, to: target, promotion: 'q' });
         if (move === null) return 'snapback';
         updateStatus();
-        if (currentRoom) socket.emit('move', { room: currentRoom, move });
+        if (mode==='online' && currentRoom && socket) socket.emit('move', { room: currentRoom, move });
+        if (mode==='ai'){
+          // after player move, let AI respond
+          if (!game.game_over()) window.setTimeout(doAIMove, 120);
+        }
       }
 
-      function onSnapEnd() {
-        board.position(game.fen());
-      }
+      function onSnapEnd() { board.position(game.fen()); }
 
-      const config = {
-        draggable: true,
-        position: 'start',
-        onDragStart: onDragStart,
-        onDrop: onDrop,
-        onSnapEnd: onSnapEnd
-      };
-
+      const config = { draggable: true, position: 'start', onDragStart, onDrop, onSnapEnd };
       board = Chessboard('board', config);
 
       function updateStatus() {
@@ -125,7 +184,7 @@
         }
 
         statusEl.textContent = 'Trạng thái: ' + status;
-        movesEl.textContent = game.pgn();
+        movesEl.textContent = game.pgn() || 'Chưa có nước đi';
       }
 
       joinBtn.addEventListener('click', () => {
@@ -145,6 +204,55 @@
         if (currentRoom && socket) socket.emit('reset', currentRoom);
       });
 
+      // Simple AI (negamax with material eval)
+      function evaluateBoard(g){
+        const values = { p:1,n:3,b:3,r:5,q:9,k:900 };
+        const board = g.board();
+        let score = 0;
+        for(let r of board) for(let p of r) if(p) score += (p.color==='w'?1:-1)*values[p.type];
+        return score;
+      }
+
+      function negamax(g, depth, alpha, beta){
+        if(depth===0) return evaluateBoard(g);
+        let max = -Infinity;
+        const moves = g.moves({verbose:true});
+        if(moves.length===0) return evaluateBoard(g);
+        for(let m of moves){
+          g.move(m);
+          let val = -negamax(g, depth-1, -beta, -alpha);
+          g.undo();
+          if(val>max) max=val;
+          if(val>alpha) alpha=val;
+          if(alpha>=beta) break;
+        }
+        return max;
+      }
+
+      function getBestMove(g, depth){
+        const moves = g.moves({verbose:true});
+        let best = null; let max = -Infinity;
+        for(let m of moves){
+          g.move(m);
+          let val = -negamax(g, depth-1, -Infinity, Infinity);
+          g.undo();
+          if(val>max){ max=val; best=m; }
+        }
+        return best;
+      }
+
+      function doAIMove(){
+        if(mode!=='ai' || game.game_over()) return;
+        // If it's AI's turn
+        const turn = game.turn() === 'w' ? 'white' : 'black';
+        if(turn !== aiColor) return;
+        const mv = getBestMove(game, aiDepth) || (game.moves({verbose:true})[0]);
+        if(mv){
+          game.move(mv);
+          board.position(game.fen());
+          updateStatus();
+        }
+      }
 
       updateStatus();
     </script>
